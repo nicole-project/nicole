@@ -1,0 +1,120 @@
+group("your.groupd.id")
+version("your.version")
+
+def junitJupiterVersion = "5.7.0"
+def removeParentSrc = true
+def supportParentChildModule = false
+
+static def deleteDirectory(File file) {
+  if (file.isFile()) {
+    return file.delete()
+  } else {
+    file.listFiles().each {
+      deleteDirectory(it)
+    }
+  }
+  return file.delete()
+}
+
+static def parentChildModule(Project project) {
+  def name = "implementation"
+  DependencySet parentDependencies = project.getConfigurations().getByName(name).getIncoming().getDependencies()
+  project.getSubprojects().each { subproject ->
+    println("++++++ Add afterEvaluate hook for ${subproject.getDisplayName()}")
+    subproject.afterEvaluate {
+      DependencySet childDependencies = subproject.getConfigurations().getByName(name).getDependencies()
+      parentDependencies.each {parent ->
+        if (!childDependencies.any {child ->
+          child.getGroup() + ":" + child.getName() == parent.getGroup() + ":" + parent.getName()
+        }) {
+          subproject.dependencies.add(name, parent)
+        }
+      }
+    }
+  }
+}
+
+allprojects {
+  group(group)
+  version(version)
+
+  repositories {
+    mavenLocal()
+    maven {
+      url "https://maven.aliyun.com/repository/public"
+      name "AliyunPublic"
+    }
+    mavenCentral()
+  }
+}
+
+subprojects {
+  apply plugin: "java"
+
+  repositories {
+    mavenCentral()
+  }
+
+  configurations {
+    developmentOnly
+    runtimeClasspath {
+      extendsFrom developmentOnly
+    }
+    compileOnly {
+      extendsFrom annotationProcessor
+    }
+  }
+
+  dependencies {
+    testImplementation("org.junit.jupiter:junit-jupiter:${junitJupiterVersion}")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
+  }
+
+
+  compileJava.inputs.files(processResources)
+
+  test {
+    useJUnitPlatform()
+    // note: JavaVersion > JavaVersion.VERSION_1_8
+    // jvmArgs("--illegal-access=deny")
+    // jvmArgs("--add-opens", "java.base/java.lang=ALL-UNNAMED")
+  }
+
+  java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+  }
+
+  tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+  }
+
+  task createSrcDirs {
+    sourceSets*.java.srcDirs*.each {
+      it.mkdirs()
+    }
+    sourceSets*.resources.srcDirs*.each {
+      it.mkdirs()
+    }
+  }
+
+  task createBuildScript {
+    dependsOn(createSrcDirs)
+    File file = new File("${projectDir}${File.separator}build.gradle")
+    if (!file.exists()) {
+      file.createNewFile()
+    }
+    if (removeParentSrc) {
+      file = new File("${file.getParentFile().getParent()}${File.separator}src")
+      if (file.exists()) {
+        deleteDirectory(file)
+      }
+    }
+  }
+
+  if (supportParentChildModule) {
+    parentChildModule(project)
+  }
+
+}
+

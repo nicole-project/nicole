@@ -1,0 +1,3 @@
+rootProject.setName("java-template")
+
+// your module like this: include("your-module-name")
